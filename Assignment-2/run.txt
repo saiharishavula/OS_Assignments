@@ -1,0 +1,6 @@
+umount -l ./mnt/stbfs/
+rmmod ./fs/stbfs/stbfs.ko
+make 
+insmod ./fs/stbfs/stbfs.ko
+mount -t stbfs ./ ./mnt/stbfs
+mount -t stbfs -o enc=passwordpassword ./ ./mnt/stbfs

@@ -1,0 +1,299 @@
+Stony Brook University - CSE-506 - HW2
+Student Name : Sai Harish Avula (113276530)
+
+Purpose:
+To become familiar with the VFS layer of Linux, and especially with extensible file systems APIs.  To build a useful file system using stacking technologies.  You will use the "wrapfs" stackable file system as a starting point for this assignment.  You will modify wrapfs to add "secure trash-bin file system" (stbfs) support.
+
+Introduction:
+In a stackable file system, each VFS-based object at the stackable file system (e.g., in Wrapfs) has a link to one other object on the lower file system (sometimes called the "hidden" object).  We identify this symbolically as X->X' where "X" is an object at the upper layer, and X' is an object on the lower layer.  This form of stacking is a single-layer linear stacking.
+
+Source Files:
+1. stbctl.c     - user code
+2. main.c       - kernel code
+3. inode.c      - kernel code
+4. file.c       - kernel code
+5. lookup.c     - kernel code
+6. dentry.c     - kernel code
+7. mmap.c       - kernel code
+8. super.c      - kernel code
+9. stbfs.h      - shared header file amoung kernel codes
+
+Changes in default config:
+CTR mode is enabled in the config that is given as the part of HW2
+
+How to run:
+$ cd CSE506/
+$ Make sure mnt/stbfs/ directory exists, if not create
+$ make (to compile user and kernel codes)
+$ insmod stbfs.ko (to insert stbfs.ko module)
+$ mount -t stbfs ./ ./mnt/stbfs (mounting without encryption key)
+$ mount -t stbfs -o enc=password ./ ./mnt/stbfs (mounting without encryption key)
+$ umount -l ./mnt/stbfs/ (to unmount)
+$ rmmod ./fs/stbfs/stbfs.ko (to remove the inserted stbfs.ko module)
+$ ./stbctl -u mnt/stbfs/.stb/filename (to undelete a file using ioctl)
+
+Nomenclature and Assumptions:
+1. The name of the file after moving to trash bin follows the format XXXX-YYYYYYYYYYYYYYYYYYYY-filename(filename.enc in case of encryption)
+   XXXX - 4 chars for user id (example if user id is 2, then it will stored as 0002)
+   YYYYYYYYYYYYYYYYYYYY - 20 chars for timestamp in nanoseconds (example if timestamp is 123456789, then it is stored as 00000000000123456789)
+2. max length of a path (MAX_PATH_LEN) is set to 1024 (change if needed)
+3. max length of a filename (MAX_FILENAME_LEN) is set to 256 (change if needed)
+4. max length of a encryption key (MAX_ENCKEY_LEN) is set to 20 (change if needed)
+   
+
+Description:
+
+1. main.c
+	a) stbfs_mount()
+        i) checks whether the user mounts with encryption key. If the argument(the first 4 chars should match with 'enc=') is given incorrectly,it returns error(-EINVAL).
+        ii) if mounted with encryption key, validates the length(returns 0, if length of key is zero. if it is greater 32 characters, it takes first 32 chars) and hashes the key. It calls utility_password_encrypt(), which converts the password to 16 bytes hash using MD5 algorithm.
+
+	b) stbfs_read_super()
+        i) stores the mount path and hashed key in super-block data (i.e, in struct stbfs_sb_info)
+        ii) creates the .stb folder (if not exists)     
+
+2. inode.c
+	a) stbfs_unlink()
+        i) firstly, checks whether the file is in .stb folder 
+        ii) if it is in .stb folder, permanently deletes the file, if extracted uid from file (first 4 chars) matches with current uid
+        iii) if not in .stb folder, now checks whether encryption key is given or not
+        iv) if encryption key is given, computes the new name following the nomenclature, encrypts the current file data block by block and then deletes the current file. (Note: the new file will be now in .stb folder). It reads minimum of (4096, remaning bytes) from the old file and sends to utility_skcipher(), where cipher algortihm(CTR mode) has been implemented. It then writes to the new file. A static string has been used for Initialization Vector. If error occurs, while in the loop, it will clear all the bytes that has been written previously using vfs_unlink().
+        v) if no encryption key is given, similarly it computes the new name following the nomenclature, copies the current file data block by block and then deletes the current file. (Note: the new file will be now in .stb folder)
+	b) stbfs_create()
+        i) checks if the current folder is .stb folder or not
+        ii) if in .stb, returns with EPERM error code, as only undelete operation is allowed in .stb folder
+    	iii) if not in .stb, performs the default functionality
+    c) stbfs_mkdir()
+        i) checks if the current folder is .stb folder or not
+        ii) if in .stb, returns with EPERM error code, as only undelete operation is allowed in .stb folder
+    	iii) if not in .stb, performs the default functionality
+    d) stbfs_rmdir()
+        i) checks if the current folder is .stb folder or not
+        ii) if in .stb, returns with EPERM error code, as only undelete operation is allowed in .stb folder
+    	iii) if not in .stb, performs the default functionality
+    e) stbfs_setattr()
+        i) checks if the current folder is .stb folder or not
+        ii) if in .stb, returns with EPERM error code, as only undelete operation is allowed in .stb folder. i.e., operations like truncate, chmod/chown, etc., are not allowed.
+    	iii) if not in .stb, performs the default functionality
+    f) stbfs_rename()
+        i) checks if the current folder is .stb folder or not
+        ii) if in .stb, returns with EPERM error code, as only undelete operation is allowed in .stb folder
+    	iii) if not in .stb, performs the default functionality
+
+3. file.c
+    a) stbfs_unlocked_ioctl()
+        i) the user code will call stbfs_unlocked_ioctl() to undelete a file
+        ii) if the command for undelete matches, it will stbfs_undelete()
+	b) stbfs_undelete()
+        i) firstly, checks whether the file to be undeleted is in .stb folder 
+        ii) if not in .stb folder, returns, as undelete operation is for only in .stb folder
+        iii) if in .stb folder, now checks whether encryption key is given or not
+        iv) if encryption key is given, retrieve the original name following the nomenclature, decrypts the current file data block by block and then deletes the current file. It reads a minimum of (4096, remaning bytes) from the input file and sends to utility_skcipher(), where cipher algortihm for decryption has been implemented. It then writes to the output file. If error occurs, while in the loop, it will clear all the bytes that has been written previously using vfs_unlink(). (Note: the restored file will be now in user CWD (where the user program has been called)).
+        v) if no encryption key is given, similarly it retrives the original name following the nomenclature, copies the current file data block by block and then deletes the current file. (Note: the restored file will be now in user CWD )
+
+	b) stbfs_readdir()
+        i) creates a new context for customised use of listing command in .stb folder
+        ii) if current folder is .stb, calls iterate_dir() with new context (list_dir())
+        iii) if not in .stb, calls iterate_dir() with default context
+    c) list_dir()
+        i) extracts the user id from the filename (first 4 chars) and checks with current uid. A root user(uid = 0) can view all the files.
+            i.a) Note that for filenames '.' and '..', a special check has been given. As these are visible to everyone irrespective of user id match.
+        ii) if matches, the file will be listed(viewed) to the user
+        iii) if not, don't list(show) it to the user
+
+Functionalities Achieved:
+1. When a user deletes a file, the file is moved to a special "hidden" folder called ".stb/" at the top of the mount point.
+2. If a user performs an unlink on a file inside .stb, then permanently deletes the file ONLY if the user owns the file
+3. users are not allowed to rename files in .stb, truncate, chmod/chown, write to them, etc
+4. No user other than root is able to fully list the contents of the directory.However, users are able to list/view their own files in the secure garbage
+5. Users may recover/restore a file deleted by mistake to user's CWD. Decrypts it back (if it was encrypted), and renames it back to its original.
+
+Test Scripts:
+
+A large file of size 50 MB has been created with name 'large_file'. This file is used as refernce to test the functionality. Note that as part of submitted files, I am pushing a file (with same name) of size 50 KB (due to file size restrictions).  Please follow the below steps to run test scripts after mounting.
+test1.sh:
+    Functionality:
+        Deleting files will be moved off to .stb folder without encryption
+    Assumption:
+        Must be mounted without encryption key (mount -t stbfs ./ ./mnt/stbfs)
+    Description:
+        a) it makes a copy of large_file with filename 'test1'
+        b) then it moves inside the mounted path (cd mnt/stbfs)
+        c) unlink test1 (the file will be moved to .stb)
+    How to run:
+        $ cd CSE-506/
+        $ sh test1.sh
+test2.sh:
+    Functionality:
+        Deleting files will be moved off to .stb folder with encryption
+    Assumption:
+        Must be mounted with encryption key (mount -t stbfs -o enc=password ./ ./mnt/stbfs)
+    Description:
+        a) it makes a copy of large_file with filename 'test2'
+        b) then it moves inside the mounted path (cd mnt/stbfs)
+        c) unlink test2 (the file will be moved to .stb with .enc extention)
+    How to run:
+        $ cd CSE-506/
+        $ sh test2.sh
+test3.sh:
+    Functionality:
+        restore a non-encrypted file in .stb folder to user CWD
+    Assumption:
+        Must be mounted without encryption key (mount -t stbfs ./ ./mnt/stbfs)
+        file name of the undeleted file in .stb should be given inside this test script
+        Perform the below steps and then run the script
+        $ cp large_file test1
+        $ cd mnt/stbfs
+        $ unlink test1
+    Description:
+        a) it runs the user code to undelete the file
+        b) on successful restoration, it then validates restored file with the original file('large_file')
+    How to run:
+        $ cd CSE-506/
+        $ sh test3.sh
+test4.sh:
+    Functionality:
+        restore a encrypted file in .stb folder to user CWD
+    Assumption:
+        Must be mounted with encryption key (mount -t stbfs -o enc=password ./ ./mnt/stbfs)
+        file name of the undeleted file in .stb should be given inside this test script
+        Perform the below steps and then run the script
+        $ cp large_file test1
+        $ cd mnt/stbfs
+        $ unlink test1
+    Description:
+        a) it runs the user code to undelete the file
+        b) on successful restoration and decryption, it then validates restored file with the original file('large_file')
+    How to run:
+        $ cd CSE-506/
+        $ sh test4.sh
+test5.sh:
+    Functionality:
+        Permanently delete the files if user id matches with file uid
+    Assumption:
+        The name of a file (to be deleted) should be given inside this test script
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) unlink filename
+    How to run:
+        $ cd CSE-506/
+        $ sh test5.sh
+test6.sh:
+    Functionality:
+        Listing contents of .stb folder
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) list the files using ls command.
+        c) users are allowed to view thier own files. however, root user can view all the files in the .stb folder
+    How to run:
+        $ cd CSE-506/
+        $ sh test6.sh
+test7.sh:
+    Functionality:
+        if a user tries to restore a file, which belongs to other user it should fail
+    Assumption:
+        file name of the undeleted file in .stb should be given inside this test script
+        the file should not belongs to current user
+    Description:
+        a) it runs the user code to undelete the file
+        b) it will fail with -EPERM error code, as the current user cannot have access to it
+    How to run:
+        $ cd CSE-506/
+        $ sh test4.sh
+test8.sh:
+    Functionality:
+        truncate a file in .stb folder
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) the operation should fail with -EPERM error as only undelete operation is allowed in .stb folder
+    How to run:
+        $ cd CSE-506/
+        $ sh test8.sh
+test9.sh:
+    Functionality:
+        change access permissions of a file in .stb folder
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) the operation should fail with -EPERM error as only undelete operation is allowed in .stb folder
+    How to run:
+        $ cd CSE-506/
+        $ sh test9.sh
+test10.sh:
+    Functionality:
+        rename a file in .stb folder
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) the operation should fail with -EPERM error as only undelete operation is allowed in .stb folder
+    How to run:
+        $ cd CSE-506/
+        $ sh test10.sh
+test11.sh:
+    Functionality:
+        create a file in .stb folder
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) the operation should fail with -EPERM error as only undelete operation is allowed in .stb folder
+    How to run:
+        $ cd CSE-506/
+        $ sh test11.sh
+test12.sh:
+    Functionality:
+        create a directory in .stb folder
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) the operation should fail with -EPERM error as only undelete operation is allowed in .stb folder
+    How to run:
+        $ cd CSE-506/
+        $ sh test12.sh
+test13.sh:
+    Functionality:
+        remove a directory in .stb folder
+    Description:
+        a) moves inside the .stb folder in the mounted path (cd mnt/stbfs/.stb)
+        b) the operation should fail with -EPERM error as only undelete operation is allowed in .stb folder
+    How to run:
+        $ cd CSE-506/
+        $ sh test13.sh
+
+
+Files submitted:
+1. stbctl.c
+2. main.c
+3. inode.c
+4. file.c
+5. lookup.c
+6. dentry.c
+7. mmap.c 
+8. stbfs.h 
+9. super.c
+10. kernel.config
+11. MakeFile
+12. test scripts (testxx.sh)
+13. README
+14. large_file
+
+Code Snippets directly used from Linux Kernel Crypto API:
+1. Creating the trash bin (.stb folder)
+   https://elixir.bootlin.com/linux/latest/source/drivers/base/devtmpfs.c#L168
+2. Cipher algorithm for encryption/decryption
+   https://www.kernel.org/doc/html/v4.18/crypto/api-samples.html
+3. Encrypting the password given by user using MD5 algortihm
+   https://www.kernel.org/doc/html/latest/crypto/api-intro.html
+4. Copy functionality from my HW1 (syscall_copy)
+
+References:
+1.  https://elixir.bootlin.com/linux/latest/source/drivers/base/devtmpfs.c#L168
+2.  https://www.kernel.org/doc/htmldocs/filesystems/API-d-path.html
+3.  https://embetronicx.com/tutorials/linux/device-drivers/ioctl-tutorial-in-linux/#IOCTL_Tutorial_in_Linux
+4.  https://www.kernel.org/doc/htmldocs/filesystems/API---d-drop.html
+5.  https://www.cplusplus.com/reference/cstdio/snprintf/
+6.  https://elixir.bootlin.com/linux/latest/source/drivers/base/devtmpfs.c#L168
+7.  https://docs.google.com/document/d/1SZzhy36R6oHlEzg-kZLoSInbpQpxhbEzoHUnpi6YiUM/edit#heading=h.9ndhv6eutpgf
+8.  https://www.geeksforgeeks.org/getopt-function-in-c-to-parse-command-line-arguments/
+9.  https://elixir.bootlin.com/linux/latest/ident/vfs_read
+10. https://www.kernel.org/doc/htmldocs/filesystems/API-vfs-unlink.html
+11. https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/fs/incfs/vfs.c
+12. https://www.kernel.org/doc/html/latest/crypto/api-intro.html
+13. https://www.kernel.org/doc/html/v4.18/crypto/api-samples.html
+14. https://elixir.bootlin.com/linux/v4.8/ident/i_size_read
+
