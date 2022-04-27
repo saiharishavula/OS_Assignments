@@ -1,0 +1,119 @@
+Blank README for CSE-506 homework
+XXX: fill inStudent Name : Sai Harish Avula (113276530)
+
+Introduction:
+This assignment is about implementing a Linux Kernel Module having the system call sys_crytocopy(). sys_crytocopy() includes three operations copy, encrytion and decryption.
+
+Source Files:
+1. xhw1.c          - user code
+2. sys_crytocopy.c - kernel code
+3. user_types.h    - shared header file between kernel and user programs
+
+How to run:
+$ cd CSE506/
+$ make
+$ sh install_modules.sh
+$ ./xhw1 -c inputfile outputfile (for copy operation)
+$ ./xhw1 -p password -e inputfile outputfile (for encrypt operation)
+$ ./xhw1 -p password -d inputfile outputfile (for decrypt operation)
+$ ./xhw1 -h (for help message)
+
+Description:
+There is a structure "struct input_args" which is typedef as INPUT_ARGUMENTS in arg_struct.h file. The fields of this structure are infile, outfile, keybuf, keylen, flag, infile_length, outfile_length.
+
+1. xhw1.c
+		 a) main() - main user function for calling the system call
+		                i) It parses the command line arguments given by the user using getopt() function.
+				ii) Below the type of flags used:
+				     * -c copy
+						 * -e encryption
+						 * -d decryption
+						 * -p password
+						 * -h help message
+				ii) Based on the options, it will assign the fields of struct cryptocopy_params.
+				iii) It checks for errors, if the command line arguments are wrongly given. Some of them include
+				     * Only one operation can be called at a time.
+						 * Password should be provided for encryption/decryption of a file.
+						 * Password can be given only once.
+						 * User-level passwords should be at least 6 characters.
+						 * providing help message.
+				iv) It uses MD5 algorithm to hash the password given by the user.
+		b) utility_check_params() - To check the correctness of command line arguments. The conditions include:
+				 i) No operation is specified
+				 ii) Password is not necessary for copy operation
+				 iii) Input filename is not given
+				 iv) Output filename is not given
+
+2. sys_crytocopy.c
+		a) cryptocopy() - Main function for cryptocopy system call
+			         i) It calls the utility function to check for errors in user space parameters and copy to kernel space
+			         ii) Based on the flag, it implements the system call feature.
+		b) utility_check_params() - Utility function
+				 i) It check the validity of user and kernel space parameters. Some of them include:
+				    * All the arguments are valid (NULL checks, invalid flags, improper combinations of arguments etc.,)
+						* access_ok() checks the validity of user space address
+						* Error while copying parameters from user to kernel space using copy_from_user()
+						* getname() uses a temporary kmalloc buffer to copy the infile/outfile name from userspace to kernel space
+				 ii) This function copies the contents from user space to kernel space.
+		c) utility_syscall_init() - Utility function
+				 i) This function is called before every operation, i.e., copy, encrypt and decrypt.
+						* check the input file status.
+	 					* check if the given input file is regular or not
+	 					* create the output file if not exists
+						* input and output files pointing to the same inode
+		d) syscall_copy() - Copy feature
+				 i) It calls a utility function utility_syscall_init() for initialization
+				 ii) It reads minimum of (4096, remaning bytes) from the input file and writes to the output file.
+				 iii) If error occurs, while in the loop, it will clear all the bytes that has been written previously using vfs_unlink()
+		e) syscall_encryption() - Encrypt feature
+				 i) It calls a utility function utility_syscall_init() for initialization
+				 ii) It calls utility_password_encrypt(), which converts the password to 16 bytes hash using MD5 algorithm. This is written at the beginning of output file (preamble).
+				 ii) It reads minimum of (4096, remaning bytes) from the input file and sends to utility_skcipher(), where cipher algortihm(CTR mode) has been implemented. It then writes to the output file. This encrypted data is added to output file(next to preamble). A static string has been used for Initialization Vector.
+				 iii) If error occurs, while in the loop, it will clear all the bytes that has been written previously using vfs_unlink().
+	  f) syscall_decryption() - Decrypt feature
+				 i) It calls a utility function utility_syscall_init() for initialization
+				 ii) It converts the password given by user to 16 bytes hash (using MD5) and then verifies with password sent during encryption.
+				 ii) If both the passwords match, it reads minimum of (4096, remaning bytes) from the input file and sends to utility_skcipher(), where cipher algortihm for decryption has been implemented. It then writes to the output file.
+				 iii) If error occurs, while in the loop, it will clear all the bytes that has been written previously using vfs_unlink().
+3. user_types.h - shared header file between kernel and user program
+     a) infile - name of the input file
+		 b) outfile - name of the output file
+		 c) keybuf - password given by the user
+		 d) keylen - length of the password
+		 e) flags - to specify type of operation
+
+Extra Credits:
+All the extra credit code is wrapped in ifdef block. One can disable/enable it.
+1. Initialization Vector:
+    a) I have augmented the IV, where instead of static string, it has first 8 bytes of page number and next 8 bytes will be inode number of the file.
+		b) In encryption, after writing the 16 bytes hash to output file, it also writes 8 bytes of inode number of file to output file(next to 16 bytes hash). This is because, we need to save the information of inode number of file for decryption. (Note: No need to save page number as it can be retrieved in decryption)
+		c) In decryption, after verifying the both the passwords(16 bytes) sent in encryption and decryption, it will read the next 8 bytes (which is inode number of file saved in encryption) and sent to cipher algorithm. With inode number of a file and page number, it will derive the IV. (Note: decryption is successfully completed only if derived IV matches with IV (during encrytion).
+
+
+Test Scripts:
+1. There are 16 test scripts to test functionality of the sys_crytocopy().
+2. Nomenclature: testxx.sh
+
+Files submitted:
+1. xhw1.c
+2. sys_crytocopy.c
+3. user_types.h
+4. test scripts
+5. kernel.config
+6. MakeFile
+
+Code Snippets directly used from Linux Kernel Crypto API:
+1. Cipher algorithm for encryption/decryption
+   https://www.kernel.org/doc/html/v4.18/crypto/api-samples.html
+2. Encrypting the password given by user using MD5 algortihm
+   https://www.kernel.org/doc/html/latest/crypto/api-intro.html
+
+References:
+1. https://docs.google.com/document/d/1SZzhy36R6oHlEzg-kZLoSInbpQpxhbEzoHUnpi6YiUM/edit#heading=h.9ndhv6eutpgf
+2. https://www.geeksforgeeks.org/getopt-function-in-c-to-parse-command-line-arguments/
+3. https://elixir.bootlin.com/linux/latest/ident/vfs_read
+4. https://www.kernel.org/doc/htmldocs/filesystems/API-vfs-unlink.html
+5. https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/fs/incfs/vfs.c
+6. https://www.kernel.org/doc/html/latest/crypto/api-intro.html
+7. https://stackoverflow.com/questions/6450152/getopt-value-stays-null
+8. https://www.kernel.org/doc/html/v4.18/crypto/api-samples.html
