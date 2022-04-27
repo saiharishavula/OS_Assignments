@@ -1,5 +1,5 @@
-Blank README for CSE-506 homework
-XXX: fill inStudent Name : Sai Harish Avula (113276530)
+README for CSE-506 homework
+Student Name : Sai Harish Avula (113276530)
 
 Introduction:
 This assignment is about implementing a Linux Kernel Module having the system call sys_crytocopy(). sys_crytocopy() includes three operations copy, encrytion and decryption.
