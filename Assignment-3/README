@@ -1,7 +1,7 @@
                                 CSE-506: Operating Systems, Spring 2022
 								Homeowork Assignment 3 - README
-								Author: Venkata Sai Srikanth Ketepalli, Jaideep Penikalapati, Sai Harish Avula
-								SBU ID: 113277520, 113220647, 113276530
+								Author: Sai Harish Avula, Jaideep Penikalapati, Venkata Sai Srikanth Ketepalli 
+								SBU ID: 113276530, 113220647, 113277520
 
 Overview:
 Design an in-kernel queueing system that performs various operations asynchronously and more efficiently.
