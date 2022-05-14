@@ -1,0 +1,116 @@
+                                CSE-506: Operating Systems, Spring 2022
+								Homeowork Assignment 3 - README
+								Author: Venkata Sai Srikanth Ketepalli, Jaideep Penikalapati, Sai Harish Avula
+								SBU ID: 113277520, 113220647, 113276530
+
+Overview:
+Design an in-kernel queueing system that performs various operations asynchronously and more efficiently.
+
+Pre-requsite steps before running any operation are as follows:
+1. cd to CSE-506 directory
+		cd /usr/src/hw3-cse506g05/CSE-506
+2. Run the Makefile:
+		make
+3. Run the shellscript to remove the existing module and insert the new one:
+		sh install_module.sh
+
+The outputs of the jobs are written into the files with file names being job_id. These job output files are stored in the following path: "/usr/src/hw3-cse506g05/CSE-506/.joboutputs/"
+
+The operations supported in this project are:
+
+1. Delete multiple files:
+	Operation to delete multiple files from the system. In case any of the given files is not present or user doesnt has the permissions, it skips this file rather than throwing the error and stopping the execution, It continues to delete the next files passed in the command. Output of the operation on each file is written into the job_id named file in .joboutput folder.
+	
+	example command to delete multiple files:
+	./xhw3 -u file1 file2 file3
+	Given the files exist, by running the above command, file1, file2, file3 gets deleted
+
+2. Rename multiple files:
+	Operation to rename multiple files in the system. In case any of the given input files is not present or user doesnt has the permissions, it skips this file rather than throwing the error and stopping the execution, It continues to rename the next files passed in the command. For every file rename operation it expects file names in pair i.e input_file_name & output_file_name. Output of the operation on each file is written into the job_id named file in .joboutput folder.
+	
+	example command to rename multiple files:
+	./xhw3 -r file1 file2 file3 file4 file5 file6
+	Given the files exist, by the above command, file1 will be renamed to file2, file3 will be renamed to file4, file5 will be renamed to file6
+
+3. Get hash of the file:
+	Operation to compute md5 hash of the given file. In case the file is not present, it returns the -EINVAL. The hash of the file is stored in the file in .joboutput folder. 
+
+	example command to get hash of the file:
+	./xhw3 -h file1
+	Given the file1 exist, by the above command, hash of the file is stored in the job_id named file in .joboutput folder. 
+
+4. Concatenate the files:
+	Operation to concatenate the files. This is designed as a binary operation unlike delete and rename operations i.e no partial operation in case any of the input files passed in the command dont exist/user doesnt have access, operation fails with appropriate error. On the success scenario, operations copies contents of all the files and merges into the output file. The last argument passed in the files is the output file.
+	and the number of files passed should be greater than 1.
+
+	example command to concatenate the files:
+	./xhw3 -c file1 file2 file3 file4
+	Given, files exist, by the above command, file1,file2 and file3 contents are copied to file4 and the relevant operation logs are stored in jobid named file in .joboutput folder.
+
+5. Stat of the files:
+	Operation to obtain stat of the files. In case the file is not present or user dont have the access, the operation on that file is skipped by writing the relevant log to job output file, and the operation is performed on the next files passed in the command. 
+
+	example command to get stat of the files:
+	./xhw3 -s file1 file2 file3 file4
+	Given, files exist, by the above command, stat of file1,file2 and file3 are obtained and stored in jobid named file in .joboutput folder.
+
+6. Encryption/Decryption of the file:
+	Operation to encrypt/decrypt the file. The command passed will have the password field, which should be between 8 and 16 characters in length.
+	On successfull encryption/decryption the input file is deleted. Password is hashed and stored into the preamble, which is later used to validate if the password passed is valid for decryption.
+
+	example command to encrypt the file:
+	./xhw3 -p MySecretPassKey -e file1 file2
+	Given, file1 exist, by the above command, file1 is encrypted and the encrypted content is written into file2.And then file1 is deleted. Operation sucess/failure log is stored in jobid named file in .joboutput folder.
+
+	example command to decrypt the file:
+	./xhw3 -p MySecretPassKey -d file2 file1
+	Given, file2 exist, by the above command, file2 is decrypted after validating password and the decrypted content is written into file1. Operation sucess/failure log is stored in jobid named file in .joboutput folder.
+
+7. Compress/Decompress the file:
+	Operation to compress/decompress the file. Operation uses deflate algorithm. After compression, the file gets compressed and new file gets generated with .deflate extension. Once the file is passed into the decompression command the output file gets generated with .dcmp extension.
+
+	example command to compress the file:
+	./xhw3 -a file1
+	Given, file1 exist, by the above command, file1 is compressed into file named file1.deflate. Operation output is stored in jobid named file in .joboutput folder.
+
+	example command to de-compress the file:
+	./xhw3 -b file1.deflate
+	Given, file1.deflate exist, by the above command, file1 is de-compressed into file named file1.deflate.dcmp. Operation output is stored in jobid named file in .joboutput folder.
+	
+Job specific commands:
+	List all the jobs currently in the queue:
+		./xhw3 -j 1
+	Set the priority of job:
+		./xhw3 -j 2 121 3 -> sets the job priority of job id: 121 to 3
+	Delete the job from the queue:
+		./xhw3 -j 3 15 -> deletes job with id 3
+	Job Status: Completed/In-progress/Waiting and ouput of the job if Job Status is completed
+		./xhw3 -g 10
+
+Polling command:
+	This argument can be used to poll for job output continuously till the job completes
+	Example: ./xhw3 -r file1 file2 file3 file4 file5 file6 -o
+
+Extra Credit:
+Implemented additional operations: compression and concatenation. 
+
+Test Scripts:
+test01.sh : test complete encryption and decryption functionalities. Validated that content of the 					pre-encryption are same as post decryption.
+test02.sh: test hash functionality. hash of the files with same content should be same
+test03.sh: test deletion of multiple files. Validated that files should not exist after deletion
+test04.sh: test renaming of multiple files. Validated files with input file names are not present and 			   content of the newly renamed file is same as the original content.
+test05.sh: test concatenation of multiple files. Validated the contents of the files combined are same as 			 the content of the output file generated.
+test06.sh: test hash functionality. hash of the files with different content should be different.
+
+References:
+https://docs.google.com/document/d/1mMS2EBXc_LJvdEcHo5baruvx2LRNE9P5_t3ZQHoaErM/edit#
+https://www.kernel.org/doc/htmldocs/filesystems/API-vfs-rename.html
+https:www.kernel.org/doc/html/v5.4/crypto/api-samples.html
+https://elixir.bootlin.com/linux/latest/source/Documentation/crypto/api-intro.txt
+https://www.openssl.org/docs/man1.1.0/man3/PKCS5_PBKDF2_HMAC_SHA1.html//
+https://embetronicx.com/tutorials/linux/device-drivers/work-queue-in-linux-own-workqueue/
+https://dri.freedesktop.org/docs/drm/core-api/kernel-api.html
+http://www.chiark.greenend.org.uk/doc/linux-doc-2.6.32/html/device-drivers/re105.html
+http://www.makelinux.net/ldd3/chp-7-sect-6.shtml
+https://blog.actorsfit.com/a?ID=00200-75bbce8c-0dc5-480a-b8ec-0c3c8c7be315
+https://elixir.bootlin.com/linux/latest/source/crypto/testmgr.c#L3206

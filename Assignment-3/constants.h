@@ -1,0 +1,19 @@
+//TODO:keteps move all the costants to this file and write description for each
+#define MAX_JOB_ID 1000
+#define MAX_PATH_SIZE 512
+#define LIST_JOBS_MAX_SIZE 4096
+#define MAX_POLL_TIME 150
+#define MAX_LOG_SIZE 1024
+#define BUFFER_BLOCK_SIZE 320
+#define MD5_KEY_LEN 16
+#define BUFFER_SIZE 4096
+#define COMPRESSION_BUFFER_SIZE 4096
+#define WORK_QUEUE_SIZE 5
+#define MAX_PRODUCERS 5
+#define MAX_CONSUMERS 2
+#define USER_KEY_SIZE 16
+#define SIZE_OF_MAP_BITS 4
+#define LOW_PRIORITY_DELAY 500000
+#define MED_PRIORITY_DELAY 30000
+#define HIGH_PRIORITY_DELAY 0
+#define JOB_OUTPUT_PATH  "/usr/src/hw3-cse506g05/CSE-506/.joboutputs/"
